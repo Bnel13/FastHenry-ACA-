@@ -35,7 +35,6 @@ operation of Software or Licensed Program(s) by LICENSEE or its customers.
 */
 
 
-
 /* this sets up the vectors to call Fastcap's ComputePsi */
 /* It will be called twice for each coordinate direction.  Once for real
 and once for imaginary */
@@ -50,9 +49,6 @@ and once for imaginary */
 void SetupComputePsi(CX*, ssystem*, CX*, int, charge*, double, double*, SYS*);
 void realmatCXvec(CX*, double**, CX*, int);
 void fixEvalDirect(charge**, int, int*, charge**, int, double**);
-
-
-/*The preconditioner is still constructed with the same inputs as the original FastHenry.*/
 
 /* Vs will contain the result,  Im is the 'q',  Size is the size of vectors. */
 /* This will alter Im.  Im = Precond*Im */
@@ -194,6 +190,12 @@ void SetupComputePsi(CX *Vs, ssystem *sys, CX *Im, int size, charge *chglist,
 		double *VUlI_real_s = (double *)malloc(sys->el_max * sizeof(double));
 		double *VUlI_imag_s = (double *)malloc(sys->el_max * sizeof(double));
 
+		double *lI_real = malloc(indsys->num_fils * sizeof(double));
+		double *lI_imag = malloc(indsys->num_fils * sizeof(double));
+
+		double *vb_real_temp = malloc(indsys->num_fils * sizeof(double));
+		double *vb_imag_temp = malloc(indsys->num_fils * sizeof(double));
+
 		double mul_lI_real;
 		double mul_lI_imag;
 
@@ -205,22 +207,27 @@ void SetupComputePsi(CX *Vs, ssystem *sys, CX *Im, int size, charge *chglist,
 
 		clock_t t;
 		t = clock();
-		for (int a = 0; a < sys->depth; a++)
+		for (int c = 0; c < 3; c++)
 		{
-			for (int b = 0; b < sys->number_level_groups[a]; b++)
+			for (int i = 0; i < indsys->num_fils; i++)
 			{
-				int kid_numm = sys->kid_num[a][b];
-				for (int k = 0; k < sys->group_interaction_number[a][b]; k++)
+				lI_real[i] = sys->fill[i]->fil->lenvect[c] * Ib[i].real;
+				lI_imag[i] = sys->fill[i]->fil->lenvect[c] * Ib[i].imag;
+				vb_real_temp[i] = 0;
+				vb_imag_temp[i] = 0;
+			}
+			track = 0;
+			for (int a = 0; a < sys->depth; a++)
+			{
+				for (int b = 0; b < sys->number_level_groups[a]; b++)
 				{
-					//	FILE *matrix = fopen("matrix.txt", "w");
-
-
-
-
-					int interact = sys->interactions[a][b][k];
-					int kid_numm_i = sys->kid_num[a][interact];
-					for (int c = 0; c < 3; c++)
+					int kid_numm = sys->kid_num[a][b];
+					for (int k = 0; k < sys->group_interaction_number[a][b]; k++)
 					{
+
+						int interact = sys->interactions[a][b][k];
+						int kid_numm_i = sys->kid_num[a][interact];
+
 
 						memset(VlI_real, 0, sys->k[track] * sizeof(double));
 						memset(VlI_imag, 0, sys->k[track] * sizeof(double));
@@ -249,13 +256,14 @@ void SetupComputePsi(CX *Vs, ssystem *sys, CX *Im, int size, charge *chglist,
 								to_do[to_count] = j;
 								++to_count;
 
-								mul_lI_real = sys->fill[sys->child_index[a][interact][j] - 1]->fil->lenvect[c] * Ib[sys->child_index[a][interact][j] - 1].real;
-								mul_lI_imag = sys->fill[sys->child_index[a][interact][j] - 1]->fil->lenvect[c] * Ib[sys->child_index[a][interact][j] - 1].imag;
+								//mul_lI_real = sys->fill[sys->child_index[a][interact][j] - 1]->fil->lenvect[c]*Ib[sys->child_index[a][interact][j] - 1].real;
+								//mul_lI_imag = sys->fill[sys->child_index[a][interact][j] - 1]->fil->lenvect[c]*Ib[sys->child_index[a][interact][j] - 1].imag;
+
+								mul_lI_real = lI_real[sys->child_index[a][interact][j] - 1];
+								mul_lI_imag = lI_imag[sys->child_index[a][interact][j] - 1];
 
 								for (int nn = 0; nn < sys->k[track]; nn++)
 								{
-									//sum += sys->U[track][i][nn] * sys->V[track][nn][j];
-
 									VlI_real[nn] += sys->V[track][nn][j] * mul_lI_real;/*(sys->fill[sys->child_index[a + 1][sys->interactions[a][b][k]][j] - 1]->fil->lenvect[c]) /* sys->fill[sys->child_index[a + 1][sys->interactions[a][b][k]][j] - 1]->fil->length)*Ib[sys->child_index[a + 1][sys->interactions[a][b][k]][j] - 1].real;*/
 									VlI_imag[nn] += sys->V[track][nn][j] * mul_lI_imag; /*(sys->fill[sys->child_index[a + 1][sys->interactions[a][b][k]][j] - 1]->fil->lenvect[c]) /* sys->fill[sys->child_index[a + 1][sys->interactions[a][b][k]][j] - 1]->fil->length)*Ib[sys->child_index[a + 1][sys->interactions[a][b][k]][j] - 1].imag;*/
 
@@ -281,8 +289,10 @@ void SetupComputePsi(CX *Vs, ssystem *sys, CX *Im, int size, charge *chglist,
 							/* after n loop is complete it becomes possible */
 							if (sys->fill[sys->child_index[a][b][i] - 1]->fil->lenvect[c] != 0)
 							{
-								mul_lIt_real = (sys->fill[sys->child_index[a][b][i] - 1]->fil->lenvect[c])*Ib[sys->child_index[a][b][i] - 1].real;//second
-								mul_lIt_imag = (sys->fill[sys->child_index[a][b][i] - 1]->fil->lenvect[c])*Ib[sys->child_index[a][b][i] - 1].imag;//second
+								//mul_lIt_real = (sys->fill[sys->child_index[a][b][i] - 1]->fil->lenvect[c])*Ib[sys->child_index[a][b][i] - 1].real;//second
+								//mul_lIt_imag = (sys->fill[sys->child_index[a][b][i] - 1]->fil->lenvect[c])*Ib[sys->child_index[a][b][i] - 1].imag;//second
+								mul_lIt_real = lI_real[sys->child_index[a][b][i] - 1];//second
+								mul_lIt_imag = lI_imag[sys->child_index[a][b][i] - 1];//second
 								for (int nn = 0; nn < sys->k[track]; nn++)
 								{
 
@@ -303,8 +313,8 @@ void SetupComputePsi(CX *Vs, ssystem *sys, CX *Im, int size, charge *chglist,
 
 								//lm x (Um x (V x ln x In)/ sys->fill[sys->child_index[a + 1][b][i] - 1]->fil->length) * UVlI_real[sys->child_index[a + 1][b][i] - 1];
 
-								Vb[sys->child_index[a][b][i] - 1].imag += (sys->fill[sys->child_index[a][b][i] - 1]->fil->lenvect[c]) /* sys->fill[sys->child_index[a + 1][b][i] - 1]->fil->length)*/ * UVlI_imag[i] * MUOVER4PI;
-								Vb[sys->child_index[a][b][i] - 1].real += (sys->fill[sys->child_index[a][b][i] - 1]->fil->lenvect[c]) /* sys->fill[sys->child_index[a + 1][b][i] - 1]->fil->length)*/ * UVlI_real[i] * MUOVER4PI;
+								vb_imag_temp[sys->child_index[a][b][i] - 1] += /*(sys->fill[sys->child_index[a][b][i] - 1]->fil->lenvect[c])*/ /* sys->fill[sys->child_index[a + 1][b][i] - 1]->fil->length)*/  UVlI_imag[i]; //* MUOVER4PI;
+								vb_real_temp[sys->child_index[a][b][i] - 1] += /*(sys->fill[sys->child_index[a][b][i] - 1]->fil->lenvect[c])*/ /* sys->fill[sys->child_index[a + 1][b][i] - 1]->fil->length)*/  UVlI_real[i];// *MUOVER4PI;
 
 
 
@@ -348,27 +358,34 @@ void SetupComputePsi(CX *Vs, ssystem *sys, CX *Im, int size, charge *chglist,
 									VUlI_imag_s[j] += UlI_imag_s[nn] * sys->V[track][nn][j];
 								}
 
-								Vb[sys->child_index[a][interact][j] - 1].real += (sys->fill[sys->child_index[a][interact][j] - 1]->fil->lenvect[c]) /* sys->fill[sys->child_index[a + 1][sys->interactions[a][b][k]][j] - 1]->fil->length)*/* VUlI_real_s[j] * MUOVER4PI;
-								Vb[sys->child_index[a][interact][j] - 1].imag += (sys->fill[sys->child_index[a][interact][j] - 1]->fil->lenvect[c]) /* sys->fill[sys->child_index[a + 1][sys->interactions[a][b][k]][j] - 1]->fil->length)*/* VUlI_imag_s[j] * MUOVER4PI;
+								vb_real_temp[sys->child_index[a][interact][j] - 1] += /*(sys->fill[sys->child_index[a][interact][j] - 1]->fil->lenvect[c]) *//* sys->fill[sys->child_index[a + 1][sys->interactions[a][b][k]][j] - 1]->fil->length)*/ VUlI_real_s[j]; //* MUOVER4PI;
+								vb_imag_temp[sys->child_index[a][interact][j] - 1] += /*(sys->fill[sys->child_index[a][interact][j] - 1]->fil->lenvect[c]) *//* sys->fill[sys->child_index[a + 1][sys->interactions[a][b][k]][j] - 1]->fil->length)*/ VUlI_imag_s[j]; //* MUOVER4PI;
 							}
 						}
-						//free(IlUV_real_s);
-						//free(IlUV_imag_s);
 
-
-
-
+						++track;
 					}
 
-					++track;
+
 
 
 				}
 
 			}
-
+			for (int i = 0; i < indsys->num_fils; i++)
+			{
+				Vb[i].real += vb_real_temp[i] * sys->fill[i]->fil->lenvect[c];
+				Vb[i].imag += vb_imag_temp[i] * sys->fill[i]->fil->lenvect[c];
+			}
 
 		}
+		for (int i = 0; i < indsys->num_fils; i++)
+		{
+			Vb[i].real *= MUOVER4PI;
+			Vb[i].imag *= MUOVER4PI;
+		}
+
+
 		t = clock() - t;
 		double time_taken = ((double)t) / CLOCKS_PER_SEC; // in seconds
 
