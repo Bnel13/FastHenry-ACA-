@@ -108,7 +108,7 @@ void MLACA_cal(int depth, int *number_of_groups_level, int **number_of_interacti
 
 
 				int rank;
-				rank = SVD_QR(UU, VV, num_elements[i][j], num_elements[i][interactions[i][j][k]], memory, tol*0.1);
+				rank = SVD_QR(UU, VV, num_elements[i][j], num_elements[i][interactions[i][j][k]], memory, tol*10);
 
 				svd_mem += rank*num_elements[i][j] + rank*num_elements[i][interactions[i][j][k]];
 				sys->k[count2] = rank;
